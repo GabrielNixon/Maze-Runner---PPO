@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import platform
 from dataclasses import dataclass
@@ -36,6 +37,9 @@ class ExactGameConfig:
     blocked_move_penalty: float = -0.005
     enemy_distance_scale: float = 0.08
     hungry_orb_distance_scale: float = 0.06
+    hunger_orb_shape_start: float = 0.65
+    hunger_orb_urgency_power: float = 0.0
+    survival_milestone_rewards: tuple[tuple[float, float], ...] = ()
 
     @property
     def decision_dt(self) -> float:
@@ -50,6 +54,19 @@ class ExactGameConfig:
             raise ValueError("frame_skip must be between 1 and 120")
         if self.max_episode_seconds <= 0:
             raise ValueError("max_episode_seconds must be positive")
+        if not 0.0 < self.hunger_orb_shape_start < 1.0:
+            raise ValueError("hunger_orb_shape_start must be between zero and one")
+        if self.hunger_orb_urgency_power < 0.0:
+            raise ValueError("hunger_orb_urgency_power must be non-negative")
+        previous = 0.0
+        for threshold, bonus in self.survival_milestone_rewards:
+            if threshold <= previous:
+                raise ValueError("survival milestones must be strictly increasing")
+            if threshold <= 0.0 or not math.isfinite(threshold):
+                raise ValueError("survival milestone thresholds must be positive and finite")
+            if not math.isfinite(bonus):
+                raise ValueError("survival milestone rewards must be finite")
+            previous = threshold
 
 
 def _library_filename() -> str:
@@ -119,6 +136,29 @@ def _nearest_distance(channel: np.ndarray) -> float:
     return float(min(1.0, distances.min() / max(center[0], 1)))
 
 
+def _hunger_orb_urgency(hunger: float, start: float, power: float) -> float:
+    if hunger >= start:
+        return 0.0
+    if power <= 0.0:
+        return 1.0
+    denominator = max(1.0 - start, 1e-6)
+    return max(1.0, ((1.0 - hunger) / denominator) ** power)
+
+
+def _milestone_bonus(
+    previous_seconds: float,
+    current_seconds: float,
+    milestones: tuple[tuple[float, float], ...],
+) -> float:
+    return float(
+        sum(
+            bonus
+            for threshold, bonus in milestones
+            if previous_seconds < threshold <= current_seconds
+        )
+    )
+
+
 class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
     """Gymnasium wrapper around the real MazeRunner C simulation.
 
@@ -148,7 +188,11 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
             raise ValueError("curriculum_level must be 0..3")
         if render_mode not in (None, "human", "rgb_array"):
             raise ValueError("invalid render_mode")
-        path = Path(library_path).expanduser().resolve() if library_path else find_exact_library()
+        path = (
+            Path(library_path).expanduser().resolve()
+            if library_path
+            else find_exact_library()
+        )
         self._lib = _configure_library(path)
         self.library_path = path
         self.curriculum_level = curriculum_level
@@ -164,6 +208,7 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
         self._stats = np.zeros(_STATS_SHAPE, dtype=np.float32)
         self._steps = 0
         self._last_orbs = 0
+        self._last_survival_time = 0.0
         self._previous_enemy_distance = 1.0
         self._previous_orb_distance = 1.0
         self._pygame = self._window = self._clock = None
@@ -176,7 +221,12 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
         )
         return {"grid": self._grid.copy(), "stats": self._stats.copy()}
 
-    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ):
         super().reset(seed=seed)
         del options
         if seed is None:
@@ -186,8 +236,10 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
             raise RuntimeError("Exact backend reset failed")
         self._steps = 0
         self._last_orbs = 0
+        self._last_survival_time = 0.0
         observation = self._read_observation()
-        self._previous_enemy_distance = _nearest_distance(observation["grid"][5] + observation["grid"][6])
+        enemy_channel = observation["grid"][5] + observation["grid"][6]
+        self._previous_enemy_distance = _nearest_distance(enemy_channel)
         self._previous_orb_distance = _nearest_distance(observation["grid"][1])
         if self.render_mode == "human":
             self.render()
@@ -210,7 +262,8 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
         if events & _EVENT_BLOCKED:
             reward += self.config.blocked_move_penalty
 
-        enemy_distance = _nearest_distance(observation["grid"][5] + observation["grid"][6])
+        enemy_channel = observation["grid"][5] + observation["grid"][6]
+        enemy_distance = _nearest_distance(enemy_channel)
         reward += self.config.enemy_distance_scale * (
             enemy_distance - self._previous_enemy_distance
         )
@@ -218,11 +271,26 @@ class ExactMazeRunnerEnv(gym.Env[dict[str, np.ndarray], int]):
 
         orb_distance = _nearest_distance(observation["grid"][1])
         hunger = float(self._lib.mr_get_hunger())
-        if hunger < 0.65:
-            reward += self.config.hungry_orb_distance_scale * (
-                self._previous_orb_distance - orb_distance
+        urgency = _hunger_orb_urgency(
+            hunger,
+            self.config.hunger_orb_shape_start,
+            self.config.hunger_orb_urgency_power,
+        )
+        if urgency > 0.0:
+            reward += (
+                self.config.hungry_orb_distance_scale
+                * urgency
+                * (self._previous_orb_distance - orb_distance)
             )
         self._previous_orb_distance = orb_distance
+
+        survival_time = float(self._lib.mr_get_survival_time())
+        reward += _milestone_bonus(
+            self._last_survival_time,
+            survival_time,
+            self.config.survival_milestone_rewards,
+        )
+        self._last_survival_time = survival_time
 
         terminated = bool(self._lib.mr_is_done())
         if terminated:
