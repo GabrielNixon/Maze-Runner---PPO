@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "maze-runner-ppo"
-version = "0.1.0"
-description = "A recurrent PPO agent and symbolic training environment for MazeRunner-style survival"
+version = "0.2.0"
+description = "Recurrent PPO for symbolic and exact MazeRunner survival environments"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -20,6 +20,7 @@ dependencies = [
   "tensorboard>=2.16",
   "tqdm>=4.66",
   "rich>=13.7",
+  "websockets>=12,<16",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["mazerunner_ppo*"]
+
+[tool.setuptools.package-data]
+mazerunner_ppo = ["lib/*.so", "lib/*.dylib", "lib/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
