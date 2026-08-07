@@ -5,8 +5,8 @@ import asyncio
 from pathlib import Path
 
 import numpy as np
-from sb3_contrib import RecurrentPPO
 import websockets
+from sb3_contrib import RecurrentPPO
 
 GRID_FLOATS = 7 * 19 * 19
 TOTAL_FLOATS = GRID_FLOATS + 14
