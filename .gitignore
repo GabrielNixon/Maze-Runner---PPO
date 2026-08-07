@@ -10,3 +10,7 @@ build/
 runs/
 *.zip
 .DS_Store
+.exact_game/
+mazerunner_ppo/lib/*.so
+mazerunner_ppo/lib/*.dylib
+mazerunner_ppo/lib/*.json
