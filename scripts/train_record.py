@@ -9,7 +9,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 
 from mazerunner_ppo.exact_env import ExactGameConfig, ExactMazeRunnerEnv
-from mazerunner_ppo.record import RecordEvalCallback, SELECTION_METRICS
+from mazerunner_ppo.record import SELECTION_METRICS, RecordEvalCallback
 
 RECORD_MILESTONE_REWARDS = (
     (60.0, 10.0),
