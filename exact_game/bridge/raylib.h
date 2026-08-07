@@ -6,6 +6,9 @@
 #ifndef PI
 #define PI 3.14159265358979323846f
 #endif
+#ifndef RAD2DEG
+#define RAD2DEG (180.0f / PI)
+#endif
 
 typedef struct Vector2 { float x, y; } Vector2;
 typedef struct Rectangle { float x, y, width, height; } Rectangle;
@@ -80,6 +83,9 @@ static inline void DrawRectangle(int x, int y, int w, int h, Color c) {
     (void)x; (void)y; (void)w; (void)h; (void)c;
 }
 static inline void DrawRectangleRec(Rectangle r, Color c) { (void)r; (void)c; }
+static inline void DrawRectangleLines(int x, int y, int w, int h, Color c) {
+    (void)x; (void)y; (void)w; (void)h; (void)c;
+}
 static inline void DrawRectangleLinesEx(Rectangle r, float thick, Color c) {
     (void)r; (void)thick; (void)c;
 }
@@ -87,6 +93,9 @@ static inline void DrawRectanglePro(Rectangle r, Vector2 o, float rot, Color c) 
     (void)r; (void)o; (void)rot; (void)c;
 }
 static inline void DrawCircle(int x, int y, float radius, Color c) {
+    (void)x; (void)y; (void)radius; (void)c;
+}
+static inline void DrawCircleLines(int x, int y, float radius, Color c) {
     (void)x; (void)y; (void)radius; (void)c;
 }
 static inline void DrawCircleGradient(int x, int y, float radius, Color c1, Color c2) {
