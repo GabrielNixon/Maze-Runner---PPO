@@ -192,6 +192,3 @@ class RecordEvalCallback(BaseCallback):
         if self.n_calls % self.eval_freq == 0:
             self._run_evaluation()
         return True
-
-    def _on_training_end(self) -> None:
-        self.eval_env.close()
