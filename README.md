@@ -173,9 +173,14 @@ The next exact-game integration step would be to add a small C API to the upstre
 
 ```text
 mazerunner_ppo/
-├── env.py          # rolling symbolic environment and renderer
-├── model.py        # CNN feature extractor for RecurrentPPO
-└── __init__.py     # Gymnasium registration
+├── config.py        # action definitions and environment configuration
+├── generation.py    # rolling procedural map buffer
+├── enemies.py       # frozen spawns and BFS pursuit
+├── observations.py  # grid/scalar observation encoding
+├── rendering.py     # lightweight RGB renderer
+├── env.py           # Gymnasium API and reward dynamics
+├── model.py         # CNN feature extractor for RecurrentPPO
+└── __init__.py      # Gymnasium registration
 scripts/
 ├── train.py
 ├── evaluate.py
