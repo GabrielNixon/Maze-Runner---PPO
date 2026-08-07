@@ -17,7 +17,13 @@ class Enemy:
 
 
 class EnemyManager:
-    def __init__(self, cfg: MazeRunnerConfig, rng: np.random.Generator, world: RollingMap, level: int):
+    def __init__(
+        self,
+        cfg: MazeRunnerConfig,
+        rng: np.random.Generator,
+        world: RollingMap,
+        level: int,
+    ) -> None:
         self.cfg, self.rng, self.world, self.level = cfg, rng, world, level
         self.items: list[Enemy] = []
 
@@ -33,7 +39,7 @@ class EnemyManager:
             return
         cr, cc = self.world.center
         radius = self.cfg.observation_size // 2
-        positions = list(zip(*np.where(self.world.spawns)))
+        positions = list(zip(*np.where(self.world.spawns), strict=False))
         self.rng.shuffle(positions)
         for row, col in positions:
             if len(self.items) >= self.cfg.max_enemies:
@@ -62,7 +68,11 @@ class EnemyManager:
             alive.append(enemy)
         self.items = alive
 
-    def _bfs(self, start: tuple[int, int], goal: tuple[int, int]) -> tuple[int, int] | None:
+    def _bfs(
+        self,
+        start: tuple[int, int],
+        goal: tuple[int, int],
+    ) -> tuple[int, int] | None:
         if start == goal:
             return start
         n = self.cfg.buffer_size
@@ -74,7 +84,10 @@ class EnemyManager:
                 nxt = nr, nc = row + dy, col + dx
                 if not (0 <= nr < n and 0 <= nc < n) or nxt in parent or self.world.walls[nxt]:
                     continue
-                if dx and dy and (self.world.walls[row, col + dx] or self.world.walls[row + dy, col]):
+                if dx and dy and (
+                    self.world.walls[row, col + dx]
+                    or self.world.walls[row + dy, col]
+                ):
                     continue
                 parent[nxt] = (row, col)
                 if nxt == goal:
