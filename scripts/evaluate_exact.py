@@ -8,6 +8,7 @@ import numpy as np
 from sb3_contrib import RecurrentPPO
 
 from mazerunner_ppo.exact_env import ExactGameConfig, ExactMazeRunnerEnv
+from mazerunner_ppo.record import DEFAULT_RECORD_MILESTONES, summarize_record_runs
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,15 +60,26 @@ def main() -> None:
     finally:
         env.close()
 
-    survival = np.array([row["survival_seconds"] for row in details], dtype=float)
-    orbs = np.array([row["orbs_collected"] for row in details], dtype=float)
+    survival = [row["survival_seconds"] for row in details]
+    orbs = [row["orbs_collected"] for row in details]
+    reasons = [row["death_reason"] for row in details]
+    record_metrics = summarize_record_runs(
+        survival,
+        orbs,
+        reasons,
+        milestones=DEFAULT_RECORD_MILESTONES,
+    )
     result = {
         "backend": "exact-c",
         "episodes": args.episodes,
-        "mean_survival_seconds": float(survival.mean()),
-        "median_survival_seconds": float(np.median(survival)),
-        "max_survival_seconds": float(survival.max()),
-        "mean_orbs": float(orbs.mean()),
+        "mean_survival_seconds": record_metrics["mean"],
+        "median_survival_seconds": record_metrics["median"],
+        "p90_survival_seconds": record_metrics["p90"],
+        "p95_survival_seconds": record_metrics["p95"],
+        "max_survival_seconds": record_metrics["max"],
+        "mean_orbs": record_metrics["mean_orbs"],
+        "milestone_rates": record_metrics["milestone_rates"],
+        "death_counts": record_metrics["death_counts"],
         "episodes_detail": details,
     }
     print(json.dumps(result, indent=2))
