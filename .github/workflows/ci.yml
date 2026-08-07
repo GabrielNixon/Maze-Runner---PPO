@@ -17,5 +17,11 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Ruff
         run: ruff check .
-      - name: Tests
-        run: pytest
+      - name: Symbolic tests
+        run: pytest --ignore=tests/test_exact_env.py
+      - name: Build exact backend
+        run: python scripts/bootstrap_exact.py
+      - name: Exact backend tests
+        run: pytest tests/test_exact_env.py
+      - name: Validate leaderboard patch
+        run: python scripts/prepare_leaderboard_build.py --force
