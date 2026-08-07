@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maze-runner-ppo"
+version = "0.1.0"
+description = "A recurrent PPO agent and symbolic training environment for MazeRunner-style survival"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Gabriel Nixon Raj"}]
+dependencies = [
+  "gymnasium>=1.0,<2",
+  "numpy>=1.26,<3",
+  "pygame>=2.5,<3",
+  "stable-baselines3>=2.4,<3",
+  "sb3-contrib>=2.4,<3",
+  "torch>=2.2",
+  "tensorboard>=2.16",
+  "tqdm>=4.66",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["mazerunner_ppo*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
