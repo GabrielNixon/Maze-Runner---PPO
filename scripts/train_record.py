@@ -97,11 +97,9 @@ def main() -> None:
             start_method="spawn",
         )
     )
-    eval_env = VecMonitor(
-        SubprocVecEnv(
-            [make_env(0, args.eval_seed, args.frame_skip)],
-            start_method="spawn",
-        )
+    eval_env = SubprocVecEnv(
+        [make_env(0, args.eval_seed, args.frame_skip)],
+        start_method="spawn",
     )
 
     custom_objects = {
