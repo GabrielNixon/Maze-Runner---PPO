@@ -41,14 +41,18 @@ def patch_player(path: Path) -> None:
         "player include",
     )
     replacements = {
-        "if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))":
-            "if (AgentInput_IsKeyDown(KEY_W) || IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))",
-        "if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))":
-            "if (AgentInput_IsKeyDown(KEY_S) || IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))",
-        "if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))":
-            "if (AgentInput_IsKeyDown(KEY_A) || IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))",
-        "if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))":
-            "if (AgentInput_IsKeyDown(KEY_D) || IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))",
+        "if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))": (
+            "if (AgentInput_IsKeyDown(KEY_W) || IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))"
+        ),
+        "if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))": (
+            "if (AgentInput_IsKeyDown(KEY_S) || IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))"
+        ),
+        "if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))": (
+            "if (AgentInput_IsKeyDown(KEY_A) || IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))"
+        ),
+        "if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))": (
+            "if (AgentInput_IsKeyDown(KEY_D) || IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))"
+        ),
     }
     for old, new in replacements.items():
         text = replace_once(text, old, new, old)
@@ -147,14 +151,60 @@ def patch_makefile(path: Path) -> None:
 def patch_shell(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     insertion_point = "    // ---- Emscripten Module ----\n"
-    bridge_js = f"""    // {MARKER}\n    window.agentBridge = {{\n      action: 0,\n      socket: null,\n      connect: function() {{\n        var self = this;\n        try {{\n          var socket = new WebSocket('ws://127.0.0.1:8765');\n          socket.binaryType = 'arraybuffer';\n          socket.onopen = function() {{\n            console.log('[MazeRunner agent] policy server connected');\n          }};\n          socket.onmessage = function(event) {{\n            if (event.data instanceof ArrayBuffer) {{\n              var bytes = new Uint8Array(event.data);\n              if (bytes.length) self.action = bytes[0] | 0;\n            }} else {{\n              self.action = parseInt(event.data, 10) | 0;\n            }}\n          }};\n          socket.onclose = function() {{\n            self.socket = null;\n            self.action = 0;\n            setTimeout(function() {{ self.connect(); }}, 1000);\n          }};\n          socket.onerror = function() {{ socket.close(); }};\n          this.socket = socket;\n        }} catch (error) {{\n          setTimeout(function() {{ self.connect(); }}, 1000);\n        }}\n      }},\n      send: function(pointer, count) {{\n        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;\n        var start = pointer >> 2;\n        var values = HEAPF32.slice(start, start + count);\n        this.socket.send(values.buffer);\n      }},\n      episodeDone: function() {{\n        this.action = 0;\n        if (this.socket && this.socket.readyState === WebSocket.OPEN)\n          this.socket.send('reset');\n      }}\n    }};\n    window.agentBridge.connect();\n\n"""
+    bridge_js = f"""    // {MARKER}
+    window.agentBridge = {{
+      action: 0,
+      socket: null,
+      connect: function() {{
+        var self = this;
+        try {{
+          var socket = new WebSocket('ws://127.0.0.1:8765');
+          socket.binaryType = 'arraybuffer';
+          socket.onopen = function() {{
+            console.log('[MazeRunner agent] policy server connected');
+          }};
+          socket.onmessage = function(event) {{
+            if (event.data instanceof ArrayBuffer) {{
+              var bytes = new Uint8Array(event.data);
+              if (bytes.length) self.action = bytes[0] | 0;
+            }} else {{
+              self.action = parseInt(event.data, 10) | 0;
+            }}
+          }};
+          socket.onclose = function() {{
+            self.socket = null;
+            self.action = 0;
+            setTimeout(function() {{ self.connect(); }}, 1000);
+          }};
+          socket.onerror = function() {{ socket.close(); }};
+          this.socket = socket;
+        }} catch (error) {{
+          setTimeout(function() {{ self.connect(); }}, 1000);
+        }}
+      }},
+      send: function(pointer, count) {{
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+        var start = pointer >> 2;
+        var values = HEAPF32.slice(start, start + count);
+        this.socket.send(values.buffer);
+      }},
+      episodeDone: function() {{
+        this.action = 0;
+        if (this.socket && this.socket.readyState === WebSocket.OPEN)
+          this.socket.send('reset');
+      }}
+    }};
+    window.agentBridge.connect();
+
+"""
     text = replace_once(text, insertion_point, bridge_js + insertion_point, "shell insertion")
     path.write_text(text, encoding="utf-8")
 
 
 def apply_patches(root: Path, clone: Path) -> None:
     src = root / "exact_game" / "web"
-    for name in ("agent_input.h", "agent_input.c", "agent_observation.h", "agent_observation.c"):
+    names = ("agent_input.h", "agent_input.c", "agent_observation.h", "agent_observation.c")
+    for name in names:
         shutil.copy2(src / name, clone / "src" / name)
     patch_player(clone / "src" / "player.c")
     patch_main(clone / "src" / "main.c")
