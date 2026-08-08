@@ -37,6 +37,10 @@ def summarize_record_runs(
         if orbs.size != survival.size:
             raise ValueError("orbs_collected must match survival_seconds length")
         metrics["mean_orbs"] = float(orbs.mean())
+        total_seconds = float(survival.sum())
+        metrics["orbs_per_minute"] = (
+            float(orbs.sum() * 60.0 / total_seconds) if total_seconds > 0.0 else 0.0
+        )
 
     metrics["milestone_rates"] = {
         f"over_{int(threshold)}s": float(np.mean(survival >= threshold))
@@ -154,7 +158,15 @@ class RecordEvalCallback(BaseCallback):
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(metrics, sort_keys=True) + "\n")
 
-        for key in ("mean", "median", "p90", "p95", "max", "mean_orbs"):
+        for key in (
+            "mean",
+            "median",
+            "p90",
+            "p95",
+            "max",
+            "mean_orbs",
+            "orbs_per_minute",
+        ):
             self.logger.record(f"record/{key}", metrics[key])
         for label, rate in metrics["milestone_rates"].items():
             self.logger.record(f"record/{label}", rate)
@@ -184,6 +196,7 @@ class RecordEvalCallback(BaseCallback):
                 f"p90={metrics['p90']:.1f}s "
                 f"p95={metrics['p95']:.1f}s "
                 f"max={metrics['max']:.1f}s "
+                f"orbs/min={metrics['orbs_per_minute']:.1f} "
                 f">180s={rates['over_180s']:.0%} "
                 f">300s={rates['over_300s']:.0%}"
             )
