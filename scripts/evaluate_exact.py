@@ -78,6 +78,7 @@ def main() -> None:
         "p95_survival_seconds": record_metrics["p95"],
         "max_survival_seconds": record_metrics["max"],
         "mean_orbs": record_metrics["mean_orbs"],
+        "orbs_per_minute": record_metrics["orbs_per_minute"],
         "milestone_rates": record_metrics["milestone_rates"],
         "death_counts": record_metrics["death_counts"],
         "episodes_detail": details,

@@ -37,6 +37,10 @@ def summarize_record_runs(
         if orbs.size != survival.size:
             raise ValueError("orbs_collected must match survival_seconds length")
         metrics["mean_orbs"] = float(orbs.mean())
+        total_seconds = float(survival.sum())
+        metrics["orbs_per_minute"] = (
+            float(orbs.sum() * 60.0 / total_seconds) if total_seconds > 0.0 else 0.0
+        )
 
     metrics["milestone_rates"] = {
         f"over_{int(threshold)}s": float(np.mean(survival >= threshold))
@@ -107,7 +111,10 @@ class RecordEvalCallback(BaseCallback):
         observation, _ = result
         return _vectorize_observation(observation)
 
-    def _run_episode(self, seed: int) -> tuple[float, int, str | None]:
+    def _run_episode(
+        self,
+        seed: int,
+    ) -> tuple[float, int, str | None, dict[str, float] | None]:
         observation = self._reset_with_seed(seed)
         state = None
         episode_start = np.ones((1,), dtype=bool)
@@ -125,21 +132,39 @@ class RecordEvalCallback(BaseCallback):
             episode_start = done
             info = infos[0]
 
+        skill_metrics = None
+        if "skill_spike_hits" in info:
+            skill_metrics = {
+                "spike_hits": float(info["skill_spike_hits"]),
+                "active_spike_choices": float(info.get("skill_active_spike_choices", 0.0)),
+                "warning_spike_choices": float(info.get("skill_warning_spike_choices", 0.0)),
+                "orb_refill_efficiency": float(info.get("skill_orb_refill_efficiency", 0.0)),
+            }
         return (
             float(info["survival_seconds"]),
             int(info["orbs_collected"]),
             info.get("death_reason"),
+            skill_metrics,
         )
 
     def _run_evaluation(self) -> dict[str, Any]:
         survival: list[float] = []
         orbs: list[int] = []
         reasons: list[str | None] = []
+        spike_hits: list[float] = []
+        active_choices: list[float] = []
+        warning_choices: list[float] = []
+        refill_efficiency: list[float] = []
         for offset in range(self.n_eval_episodes):
-            seconds, orb_count, reason = self._run_episode(self.seed + offset)
+            seconds, orb_count, reason, skills = self._run_episode(self.seed + offset)
             survival.append(seconds)
             orbs.append(orb_count)
             reasons.append(reason)
+            if skills is not None:
+                spike_hits.append(skills["spike_hits"])
+                active_choices.append(skills["active_spike_choices"])
+                warning_choices.append(skills["warning_spike_choices"])
+                refill_efficiency.append(skills["orb_refill_efficiency"])
 
         metrics = summarize_record_runs(
             survival,
@@ -147,6 +172,15 @@ class RecordEvalCallback(BaseCallback):
             reasons,
             milestones=self.milestones,
         )
+        if spike_hits:
+            total_seconds = float(sum(survival))
+            metrics["mean_spike_hits"] = float(np.mean(spike_hits))
+            metrics["spike_hits_per_minute"] = (
+                float(sum(spike_hits) * 60.0 / total_seconds) if total_seconds > 0.0 else 0.0
+            )
+            metrics["mean_active_spike_choices"] = float(np.mean(active_choices))
+            metrics["mean_warning_spike_choices"] = float(np.mean(warning_choices))
+            metrics["mean_orb_refill_efficiency"] = float(np.mean(refill_efficiency))
         metrics["timesteps"] = int(self.num_timesteps)
         metrics["selection_metric"] = self.selection_metric
         metrics["selection_score"] = float(metrics[self.selection_metric])
@@ -154,8 +188,27 @@ class RecordEvalCallback(BaseCallback):
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(metrics, sort_keys=True) + "\n")
 
-        for key in ("mean", "median", "p90", "p95", "max", "mean_orbs"):
+        base_keys = (
+            "mean",
+            "median",
+            "p90",
+            "p95",
+            "max",
+            "mean_orbs",
+            "orbs_per_minute",
+        )
+        for key in base_keys:
             self.logger.record(f"record/{key}", metrics[key])
+        skill_keys = (
+            "mean_spike_hits",
+            "spike_hits_per_minute",
+            "mean_active_spike_choices",
+            "mean_warning_spike_choices",
+            "mean_orb_refill_efficiency",
+        )
+        for key in skill_keys:
+            if key in metrics:
+                self.logger.record(f"record/{key}", metrics[key])
         for label, rate in metrics["milestone_rates"].items():
             self.logger.record(f"record/{label}", rate)
         self.logger.record("record/selection_score", metrics["selection_score"])
@@ -178,14 +231,22 @@ class RecordEvalCallback(BaseCallback):
 
         if self.verbose:
             rates = metrics["milestone_rates"]
+            skill_text = ""
+            if "spike_hits_per_minute" in metrics:
+                skill_text = (
+                    f"spike/min={metrics['spike_hits_per_minute']:.2f} "
+                    f"refill_eff={metrics['mean_orb_refill_efficiency']:.2f} "
+                )
             print(
                 "Record eval: "
                 f"median={metrics['median']:.1f}s "
                 f"p90={metrics['p90']:.1f}s "
                 f"p95={metrics['p95']:.1f}s "
                 f"max={metrics['max']:.1f}s "
-                f">180s={rates['over_180s']:.0%} "
-                f">300s={rates['over_300s']:.0%}"
+                f"orbs/min={metrics['orbs_per_minute']:.1f} "
+                f"{skill_text}"
+                f">180s={rates.get('over_180s', 0.0):.0%} "
+                f">300s={rates.get('over_300s', 0.0):.0%}"
             )
         return metrics
 
