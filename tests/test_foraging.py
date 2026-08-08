@@ -34,13 +34,15 @@ def test_hazard_aware_route_avoids_active_spike_when_detour_is_cheaper() -> None
     grid[1, center, center + 3] = 1.0
     baseline = nearest_reachable_orb_distance(grid)
 
-    # The direct east route now crosses an active spike. Dijkstra should prefer
-    # the slightly longer safe detour rather than paying the large active cost.
+    # Force a choice between crossing an active spike and taking a longer route
+    # around it. Walls above/below the spike prevent a zero-cost diagonal bypass.
     grid[2, center, center + 1] = 1.0
     grid[3, center, center + 1] = 1.0
+    grid[0, center - 1, center + 1] = 1.0
+    grid[0, center + 1, center + 1] = 1.0
     hazardous = nearest_reachable_orb_distance(grid)
     assert hazardous > baseline
-    assert hazardous < 0.5
+    assert hazardous < 0.8
 
 
 def test_unreachable_orb_returns_one() -> None:
