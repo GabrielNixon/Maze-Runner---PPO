@@ -94,14 +94,46 @@ def patch_main(path: Path) -> None:
         "#endif",
         "game-over hook",
     )
+    original_leaderboard_block = """        if (EM_ASM_INT({
+                return (window.lb_isTop10 && window.lb_isTop10($0, $1)) ? 1 : 0;
+            }, time_ms, g_score_orbs)) {
+            g_lb_modal_pending = 1;
+            EM_ASM({
+                if (window.lb_showEntryModal) {
+                    var pix = [];
+                    for (var i = 0; i < 64; i++) pix.push(HEAPU8[$2 + i]);
+                    window.lb_showEntryModal($0, $1, pix);
+                }
+            }, time_ms, g_score_orbs, &g_draw.pixels[0][0]);
+        }
+"""
+    record_aware_leaderboard_block = """        int should_prompt = EM_ASM_INT({
+            return (window.lb_isTop10 && window.lb_isTop10($0, $1)) ? 1 : 0;
+        }, time_ms, g_score_orbs);
+#if defined(AGENT_MODE)
+        if (should_prompt) {
+            should_prompt = EM_ASM_INT({
+                return (window.lb_isRecord && window.lb_isRecord($0, $1)) ? 1 : 0;
+            }, time_ms, g_score_orbs);
+            if (should_prompt) g_agent_qualified = 1;
+        }
+#endif
+        if (should_prompt) {
+            g_lb_modal_pending = 1;
+            EM_ASM({
+                if (window.lb_showEntryModal) {
+                    var pix = [];
+                    for (var i = 0; i < 64; i++) pix.push(HEAPU8[$2 + i]);
+                    window.lb_showEntryModal($0, $1, pix);
+                }
+            }, time_ms, g_score_orbs, &g_draw.pixels[0][0]);
+        }
+"""
     text = replace_once(
         text,
-        "            g_lb_modal_pending = 1;\n",
-        "            g_lb_modal_pending = 1;\n"
-        "#if defined(AGENT_MODE)\n"
-        "            g_agent_qualified = 1;\n"
-        "#endif\n",
-        "leaderboard qualification hook",
+        original_leaderboard_block,
+        record_aware_leaderboard_block,
+        "record-aware leaderboard hook",
     )
     text = replace_once(
         text,
@@ -177,6 +209,24 @@ def patch_makefile(path: Path) -> None:
 
 def patch_shell(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    top10_block = """    window.lb_isTop10 = function(time_ms, orbs) {
+      if (!_lb_fetched) return false;
+      if (_lb_cache.length < LB_MAX) return true;
+      var worst = _lb_cache[_lb_cache.length - 1];
+      return time_ms > worst.time_ms ||
+             (time_ms === worst.time_ms && orbs > worst.orbs);
+    };
+"""
+    record_block = top10_block + """
+    window.lb_isRecord = function(time_ms, orbs) {
+      if (!_lb_fetched || _lb_cache.length === 0) return false;
+      var best = _lb_cache[0];
+      return time_ms > best.time_ms ||
+             (time_ms === best.time_ms && orbs > best.orbs);
+    };
+"""
+    text = replace_once(text, top10_block, record_block, "record leaderboard helper")
+
     insertion_point = "    // ---- Emscripten Module ----\n"
     bridge_js = f"""    // {MARKER}
     window.agentBridge = {{
