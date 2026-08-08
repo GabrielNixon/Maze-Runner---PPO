@@ -6,10 +6,34 @@ from pathlib import Path
 import prepare_leaderboard_build as base
 
 TOP10_MARKER = "MAZERUNNER_PPO_TOP10_GRINDER"
+DEFAULT_GRINDER_NAME = "Gabriel"
+MAX_BROWSER_DT = 0.05
 
 
 def patch_top10_main(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+
+    # requestAnimationFrame / Raylib can return a huge frame delta when Chrome
+    # suspends or throttles a background WASM tab. Upstream adds that dt directly
+    # to both score time and hunger decay, which can manufacture multi-minute
+    # scores in a single resumed frame. Clamp only the agent browser build; normal
+    # 60 Hz frames (~0.0167 s) are untouched.
+    frame_start = """static void UpdateDrawFrame(void) {
+    float dt = GetFrameTime();
+"""
+    frame_start_clamped = f"""static void UpdateDrawFrame(void) {{
+    float dt = GetFrameTime();
+#if defined(PLATFORM_WEB) && defined(AGENT_MODE)
+    if (dt < 0.0f) dt = 0.0f;
+    if (dt > {MAX_BROWSER_DT:.2f}f) dt = {MAX_BROWSER_DT:.2f}f;
+#endif
+"""
+    text = base.replace_once(
+        text,
+        frame_start,
+        frame_start_clamped,
+        "browser frame-delta clamp",
+    )
 
     # The normal agent build pauses only for a new #1. For the grinder we pause
     # for every score that qualifies for the live top 10. The actual submission
@@ -72,6 +96,26 @@ def patch_top10_main(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def patch_top10_shell(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    saved_name = """    function lb_getSavedName() {
+      try { return localStorage.getItem(LB_NAME_KEY) || ''; } catch (e) { return ''; }
+    }
+"""
+    grinder_name = f"""    function lb_getSavedName() {{
+      try {{ return localStorage.getItem(LB_NAME_KEY) || '{DEFAULT_GRINDER_NAME}'; }}
+      catch (e) {{ return '{DEFAULT_GRINDER_NAME}'; }}
+    }}
+"""
+    text = base.replace_once(
+        text,
+        saved_name,
+        grinder_name,
+        "grinder default leaderboard name",
+    )
+    path.write_text(text, encoding="utf-8")
+
+
 def parse_args() -> argparse.Namespace:
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
@@ -98,8 +142,11 @@ def main() -> None:
     base.prepare_clone(clone, args.force)
     base.apply_patches(root, clone)
     patch_top10_main(clone / "src" / "main.c")
+    patch_top10_shell(clone / "web" / "shell.html")
 
     print(f"Prepared endless top-10 grinder at: {clone}")
+    print(f"Browser frame delta capped at {MAX_BROWSER_DT:.2f}s to reject tab-resume timing spikes.")
+    print(f"Leaderboard name defaults to {DEFAULT_GRINDER_NAME!r}.")
     print("Non-qualifying deaths restart automatically.")
     print("Top-10 runs pause on the game's normal Save Score / Skip modal.")
     print("After Save or Skip, the next Survival run starts automatically.")
