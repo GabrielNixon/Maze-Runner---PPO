@@ -76,6 +76,7 @@ def patch_main(path: Path) -> None:
         "static float g_agent_obs[AGENT_OBSERVATION_FLOATS];\n"
         "static float g_agent_accum;\n"
         "static int   g_agent_last_action;\n"
+        "static int   g_agent_qualified;\n"
         "#endif\n",
         "agent globals",
     )
@@ -95,11 +96,21 @@ def patch_main(path: Path) -> None:
     )
     text = replace_once(
         text,
+        "            g_lb_modal_pending = 1;\n",
+        "            g_lb_modal_pending = 1;\n"
+        "#if defined(AGENT_MODE)\n"
+        "            g_agent_qualified = 1;\n"
+        "#endif\n",
+        "leaderboard qualification hook",
+    )
+    text = replace_once(
+        text,
         "    g_state            = STATE_SURVIVAL_INTRO;",
         "    g_state            = STATE_SURVIVAL_INTRO;\n"
         "#if defined(PLATFORM_WEB) && defined(AGENT_MODE)\n"
         "    g_agent_accum = 0.0f;\n"
         "    g_agent_last_action = 0;\n"
+        "    g_agent_qualified = 0;\n"
         "    AgentInput_SetAction(0);\n"
         "#endif",
         "episode reset hook",
@@ -126,6 +137,22 @@ def patch_main(path: Path) -> None:
         "#endif\n"
         "        Player_Update(&g_player, &g_maze, dt);",
         "play-loop hook",
+    )
+    text = replace_once(
+        text,
+        "        {\n"
+        "            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {\n"
+        "                // Retry: survival replays full intro; custom replays same map instantly\n",
+        "        {\n"
+        "#if defined(PLATFORM_WEB) && defined(AGENT_MODE)\n"
+        "            if (g_game_mode == MODE_SURVIVAL && !g_agent_qualified) {\n"
+        "                enter_survival_intro();\n"
+        "                return;\n"
+        "            }\n"
+        "#endif\n"
+        "            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {\n"
+        "                // Retry: survival replays full intro; custom replays same map instantly\n",
+        "agent auto retry",
     )
     path.write_text(text, encoding="utf-8")
 
