@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections import deque
+from dataclasses import dataclass
 
 import gymnasium as gym
 import numpy as np
@@ -66,9 +66,8 @@ def nearest_reachable_orb_distance(grid: np.ndarray) -> float:
                 continue
             if walls[ny, nx] or (ny, nx) in visited:
                 continue
-            if dy != 0 and dx != 0:
-                if walls[y + dy, x] or walls[y, x + dx]:
-                    continue
+            if dy != 0 and dx != 0 and (walls[y + dy, x] or walls[y, x + dx]):
+                continue
             next_distance = distance + 1
             if orbs[ny, nx]:
                 normalizer = max(height, width, 1)
@@ -124,11 +123,7 @@ class ForagingRewardWrapper(gym.Wrapper):
 
         useful_fraction = useful_orb_fraction(self._previous_hunger)
         if orb_delta:
-            reward += (
-                self.foraging_config.useful_orb_bonus
-                * useful_fraction
-                * float(orb_delta)
-            )
+            reward += self.foraging_config.useful_orb_bonus * useful_fraction * float(orb_delta)
 
         info = dict(info)
         info["foraging_path_distance"] = current_distance
