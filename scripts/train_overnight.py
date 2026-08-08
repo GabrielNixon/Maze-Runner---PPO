@@ -7,6 +7,7 @@ from pathlib import Path
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.utils import get_schedule_fn
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 
 from mazerunner_ppo.exact_env import ExactGameConfig, ExactMazeRunnerEnv
@@ -233,7 +234,7 @@ def make_train_vec(
 def set_optimizer_phase(model: RecurrentPPO, phase: Phase) -> None:
     learning_rate = phase.learning_rate
     model.learning_rate = learning_rate
-    model.lr_schedule = lambda _: learning_rate
+    model.lr_schedule = get_schedule_fn(learning_rate)
     model.ent_coef = phase.ent_coef
     for group in model.policy.optimizer.param_groups:
         group["lr"] = learning_rate
