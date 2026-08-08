@@ -25,3 +25,5 @@ jobs:
         run: pytest tests/test_exact_env.py
       - name: Validate leaderboard patch
         run: python scripts/prepare_leaderboard_build.py --force
+      - name: Validate endless top-10 grinder patch
+        run: python scripts/prepare_top10_grinder_build.py --force
